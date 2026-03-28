@@ -1,205 +1,213 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
-  IconCamera,
   IconChartBar,
   IconDashboard,
-  IconDatabase,
-  IconFileAi,
   IconFileDescription,
-  IconFileWord,
-  IconFolder,
   IconHelp,
-  IconInnerShadowTop,
-  IconListDetails,
-  IconReport,
+  IconLogout,
   IconSearch,
   IconSettings,
   IconUsers,
-} from "@tabler/icons-react"
+} from "@tabler/icons-react";
 
-import { NavDocuments } from "@/components/nav-documents"
-import { NavMain } from "@/components/nav-main"
-import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar"
+  clearAuthSession,
+  getStoredUser,
+  getUserDisplayName,
+  getUserInitials,
+} from "@/lib/auth-session";
+import { Button } from "@/components/ui/button";
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
+const navigation = [
+  {
+    title: "Dashboard",
+    href: "/admin",
+    icon: IconDashboard,
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/admin",
-      icon: IconDashboard,
-    },
-    {
-      title: "Lifecycle",
-      url: "#",
-      icon: IconListDetails,
-    },
-    {
-      title: "Analytics",
-      url: "#",
-      icon: IconChartBar,
-    },
-    {
-      title: "Projects",
-      url: "#",
-      icon: IconFolder,
-    },
-    {
-      title: "Team",
-      url: "#",
-      icon: IconUsers,
-    },
-  ],
-  navClouds: [
-    {
-      title: "Capture",
-      icon: IconCamera,
-      isActive: true,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Proposal",
-      icon: IconFileDescription,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Prompts",
-      icon: IconFileAi,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  navSecondary: [
-    {
-      title: "Settings",
-      url: "#",
-      icon: IconSettings,
-    },
-    {
-      title: "Get Help",
-      url: "#",
-      icon: IconHelp,
-    },
-    {
-      title: "Search",
-      url: "#",
-      icon: IconSearch,
-    },
-  ],
-  documents: [
-    {
-      name: "Data Library",
-      url: "#",
-      icon: IconDatabase,
-    },
-    {
-      name: "Reports",
-      url: "#",
-      icon: IconReport,
-    },
-    {
-      name: "Word Assistant",
-      url: "#",
-      icon: IconFileWord,
-    },
-  ],
+  {
+    title: "TNPSC",
+    href: "/admin/tnpsc",
+    icon: IconFileDescription,
+  },
+  {
+    title: "RRB",
+    href: "/admin/rrb",
+    icon: IconFileDescription,
+  },
+  {
+    title: "TNUSRB",
+    href: "/admin/tnusrb",
+    icon: IconFileDescription,
+  },
+  {
+    title: "Current Affairs",
+    href: "/admin/current-affairs",
+    icon: IconFileDescription,
+  },
+];
+
+const managementNavigation = [
+  {
+    title: "Students",
+    href: "/admin/students",
+    icon: IconUsers,
+  },
+  {
+    title: "Analytics",
+    href: "/admin/analytics",
+    icon: IconChartBar,
+  },
+];
+
+const secondaryNavigation = [
+  {
+    title: "Search",
+    href: "/admin/search",
+    icon: IconSearch,
+  },
+  {
+    title: "Help",
+    href: "/admin/help",
+    icon: IconHelp,
+  },
+  {
+    title: "Settings",
+    href: "/admin/settings",
+    icon: IconSettings,
+  },
+];
+
+function isActivePath(pathname: string, href: string) {
+  if (href === "/admin") {
+    return pathname === href;
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [user, setUser] = React.useState(data.user)
-  React.useEffect(() => {
-    try {
-      const stored = typeof window !== "undefined" ? localStorage.getItem("user") : null
-      if (stored) {
-        const parsed = JSON.parse(stored) as { fullName?: string; email?: string }
-        setUser({
-          name: parsed.fullName || parsed.email || "User",
-          email: parsed.email || "",
-          avatar: "",
-        })
-      }
-    } catch {
-      // keep default
+export function AppSidebar() {
+  const pathname = usePathname() ?? "/admin";
+  const router = useRouter();
+  const [user, setUser] = useState({
+    name: "Admin User",
+    email: "admin@example.com",
+    initials: "AU",
+  });
+
+  useEffect(() => {
+    const storedUser = getStoredUser();
+
+    if (!storedUser) {
+      return;
     }
-  }, [])
-  const handleLogout = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("token")
-      localStorage.removeItem("user")
-    }
-    window.location.href = "/login"
-  }, [])
+
+    setUser({
+      name: getUserDisplayName(storedUser),
+      email: storedUser.email,
+      initials: getUserInitials(storedUser),
+    });
+  }, []);
+
+  function handleLogout() {
+    clearAuthSession();
+    router.replace("/login");
+  }
+
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
+    <div className="flex h-full flex-col bg-card">
+      <div className="border-b p-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+            <IconDashboard className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-base font-semibold">SPKS Exams</span>
+            <span className="text-sm text-muted-foreground">Admin Panel</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-6 overflow-y-auto p-4">
+        <SidebarSection title="Exams" items={navigation} pathname={pathname} />
+        <SidebarSection
+          title="Management"
+          items={managementNavigation}
+          pathname={pathname}
+        />
+        <SidebarSection
+          title="Support"
+          items={secondaryNavigation}
+          pathname={pathname}
+        />
+      </div>
+
+      <div className="space-y-4 border-t p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+            <span className="text-xs font-medium">{user.initials}</span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{user.name}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {user.email}
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full justify-start"
+          onClick={handleLogout}
+        >
+          <IconLogout className="mr-2 h-4 w-4" />
+          Logout
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SidebarSection({
+  title,
+  items,
+  pathname,
+}: {
+  title: string;
+  items: Array<{
+    title: string;
+    href: string;
+    icon: typeof IconDashboard;
+  }>;
+  pathname: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h3>
+      <nav className="space-y-1">
+        {items.map((item) => {
+          const active = isActivePath(pathname, item.href);
+
+          return (
+            <Button
+              key={item.href}
+              variant={active ? "secondary" : "ghost"}
+              className="w-full justify-start"
               asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
-              <Link href="/admin">
-                <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">SPKS Exams</span>
+              <Link href={item.href}>
+                <item.icon className="mr-2 h-4 w-4" />
+                {item.title}
               </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-      <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavDocuments items={data.documents} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
-      </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={user} onLogout={handleLogout} />
-      </SidebarFooter>
-    </Sidebar>
-  )
+            </Button>
+          );
+        })}
+      </nav>
+    </div>
+  );
 }

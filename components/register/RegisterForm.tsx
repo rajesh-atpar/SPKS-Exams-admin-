@@ -3,7 +3,28 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CircleAlert, LockKeyhole, UserPlus } from "lucide-react";
+
 import { register as registerUser } from "@/lib/auth-api";
+import { storeAuthSession } from "@/lib/auth-session";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 export function RegisterForm() {
   const router = useRouter();
@@ -19,16 +40,21 @@ export function RegisterForm() {
     setLoading(true);
     try {
       const res = await registerUser({ email, password, fullName });
-      if (res.token || res.user) {
-        if (typeof window !== "undefined" && res.token) {
-          localStorage.setItem("token", res.token);
-          if (res.user) localStorage.setItem("user", JSON.stringify(res.user));
-        }
+      const success =
+        Boolean(res.token || res.user) ||
+        res.message?.toLowerCase().includes("success") === true;
+
+      if (success) {
+        storeAuthSession({
+          token: res.token ?? "session-authenticated",
+          user: res.user,
+        });
         router.push("/admin");
         router.refresh();
-      } else {
-        setError(res.message || "Registration failed.");
+        return;
       }
+
+      setError(res.message || "Registration failed.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -37,65 +63,100 @@ export function RegisterForm() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-background to-secondary">
-      <div className="w-full max-w-[400px] bg-card border border-border rounded-[10px] p-8 shadow-2xl">
-        <h1 className="text-2xl font-semibold tracking-tight mb-1.5">Create account</h1>
-        <p className="text-muted-foreground text-sm mb-6">Register to access the admin panel.</p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {error && (
-            <div className="px-3.5 py-2.5 bg-destructive/10 border border-destructive/30 rounded-md text-destructive text-sm">
-              {error}
-            </div>
-          )}
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-muted-foreground">
-            Full name
-            <input
-              type="text"
-              className="px-3.5 py-2.5 bg-secondary border border-border rounded-md text-foreground text-[0.95rem] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/70 transition"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="John Doe"
-              required
-              autoComplete="name"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-muted-foreground">
-            Email
-            <input
-              type="email"
-              className="px-3.5 py-2.5 bg-secondary border border-border rounded-md text-foreground text-[0.95rem] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/70 transition"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              autoComplete="email"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-muted-foreground">
-            Password
-            <input
-              type="password"
-              className="px-3.5 py-2.5 bg-secondary border border-border rounded-md text-foreground text-[0.95rem] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/70 transition"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              minLength={6}
-              autoComplete="new-password"
-            />
-          </label>
-          <button
-            type="submit"
-            className="w-full inline-flex items-center justify-center py-2.5 px-5 text-[0.95rem] font-medium rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed transition"
-            disabled={loading}
+    <AuthShell mode="register">
+      <Card className="border-border/60 bg-card/95 shadow-2xl backdrop-blur">
+        <CardHeader className="space-y-3 pb-6">
+          <CardTitle className="text-3xl tracking-tight">
+            Create admin account
+          </CardTitle>
+          <CardDescription className="text-sm leading-6">
+            Add a coordinator or administrator who can access the redesigned
+            SPKS control center right away.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {error ? (
+            <Alert variant="destructive">
+              <CircleAlert className="size-4" />
+              <AlertTitle>Registration failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <Alert className="border-primary/15 bg-primary/5">
+            <LockKeyhole className="size-4" />
+            <AlertTitle>Quick setup</AlertTitle>
+            <AlertDescription>
+              New admin accounts work immediately in mock mode and can be used
+              to enter the dashboard without additional steps.
+            </AlertDescription>
+          </Alert>
+
+          <form onSubmit={handleSubmit}>
+            <FieldGroup className="gap-5">
+              <Field>
+                <FieldLabel htmlFor="fullName">Full name</FieldLabel>
+                <Input
+                  id="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Enter administrator name"
+                  required
+                  autoComplete="name"
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="email">Email address</FieldLabel>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@example.com"
+                  required
+                  autoComplete="email"
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Create a secure password"
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                />
+                <FieldDescription>
+                  Use at least 6 characters so the account is ready for future
+                  backend validation rules too.
+                </FieldDescription>
+              </Field>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                <UserPlus className="size-4" />
+                {loading ? "Creating account..." : "Create account"}
+              </Button>
+            </FieldGroup>
+          </form>
+        </CardContent>
+
+        <CardFooter className="justify-center border-t pt-6 text-sm text-muted-foreground">
+          Already have an account?{" "}
+          <Link
+            href="/login"
+            className="ml-1 font-medium text-foreground transition-colors hover:text-primary"
           >
-            {loading ? "Creating account…" : "Create account"}
-          </button>
-        </form>
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          Already have an account? <Link href="/login" className="font-medium hover:underline">Sign in</Link>
-        </p>
-      </div>
-    </main>
+            Sign in instead
+          </Link>
+        </CardFooter>
+      </Card>
+    </AuthShell>
   );
 }

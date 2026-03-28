@@ -31,14 +31,12 @@ import {
 
 export function NavUser({
   user,
-  onLogout,
 }: {
   user: {
     name: string
     email: string
     avatar: string
   }
-  onLogout?: () => void
 }) {
   const { isMobile } = useSidebar()
 
@@ -57,7 +55,7 @@ export function NavUser({
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
-                <span className="text-muted-foreground truncate text-xs">
+                <span className="truncate text-xs text-muted-foreground">
                   {user.email}
                 </span>
               </div>
@@ -78,7 +76,7 @@ export function NavUser({
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
-                  <span className="text-muted-foreground truncate text-xs">
+                  <span className="truncate text-xs text-muted-foreground">
                     {user.email}
                   </span>
                 </div>
@@ -100,7 +98,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onLogout}>
+            <DropdownMenuItem>
               <IconLogout />
               Log out
             </DropdownMenuItem>

@@ -1,4 +1,7 @@
+import { mockLogin, mockRegister } from "./mock-auth";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const USE_MOCK_AUTH = process.env.NEXT_PUBLIC_USE_MOCK_AUTH === "true" || process.env.NODE_ENV === "development";
 
 export type RegisterPayload = {
   email: string;
@@ -17,18 +20,23 @@ export type AuthResponse = {
   message?: string;
 };
 
+type RequestOptions = Omit<RequestInit, "body"> & {
+  body?: unknown;
+};
+
 async function request<T>(
   path: string,
-  options: RequestInit & { body?: object } = {}
+  options: RequestOptions = {}
 ): Promise<T> {
   const { body, ...rest } = options;
+  const requestBody = body ? JSON.stringify(body) : undefined;
   const res = await fetch(`${API_BASE}${path}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
       ...rest.headers,
     },
-    body: body ? JSON.stringify(body) : rest.body,
+    body: requestBody,
   });
 
   const data = await res.json().catch(() => ({}));
@@ -45,6 +53,9 @@ async function request<T>(
 }
 
 export async function register(payload: RegisterPayload): Promise<AuthResponse> {
+  if (USE_MOCK_AUTH) {
+    return mockRegister(payload);
+  }
   return request<AuthResponse>("/api/auth/register", {
     method: "POST",
     body: payload,
@@ -52,6 +63,9 @@ export async function register(payload: RegisterPayload): Promise<AuthResponse> 
 }
 
 export async function login(payload: LoginPayload): Promise<AuthResponse> {
+  if (USE_MOCK_AUTH) {
+    return mockLogin(payload);
+  }
   return request<AuthResponse>("/api/auth/login", {
     method: "POST",
     body: payload,

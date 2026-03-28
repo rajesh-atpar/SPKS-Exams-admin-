@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import {
   IconDots,
   IconFolder,
@@ -43,16 +45,16 @@ export function NavDocuments({
         {items.map((item) => (
           <SidebarMenuItem key={item.name}>
             <SidebarMenuButton asChild>
-              <a href={item.url}>
+              <Link href={item.url}>
                 <item.icon />
                 <span>{item.name}</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuAction
                   showOnHover
-                  className="data-[state=open]:bg-accent rounded-sm"
+                  className="rounded-sm data-[state=open]:bg-accent"
                 >
                   <IconDots />
                   <span className="sr-only">More</span>
