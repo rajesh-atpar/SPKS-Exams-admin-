@@ -21,6 +21,7 @@ import {
   getUserInitials,
 } from "@/lib/auth-session";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const navigation = [
   {
@@ -89,7 +90,13 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppSidebar() {
+export function AppSidebar({
+  compact = false,
+  onNavigate,
+}: {
+  compact?: boolean;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname() ?? "/admin";
   const router = useRouter();
   const [user, setUser] = useState({
@@ -119,52 +126,72 @@ export function AppSidebar() {
 
   return (
     <div className="flex h-full flex-col bg-card">
-      <div className="border-b p-6">
-        <div className="flex items-center gap-3">
+      <div
+        className={cn(
+          "flex h-24 items-center border-b",
+          compact ? "justify-center px-3" : "px-6"
+        )}
+      >
+        <div className={cn("flex items-center", compact ? "justify-center" : "gap-3")}>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
             <IconDashboard className="h-5 w-5 text-primary-foreground" />
           </div>
-          <div className="flex flex-col">
-            <span className="text-base font-semibold">SPKS Exams</span>
-            <span className="text-sm text-muted-foreground">Admin Panel</span>
-          </div>
+          {!compact ? (
+            <div className="flex flex-col">
+              <span className="text-base font-semibold">SPKS Exams</span>
+              <span className="text-sm text-muted-foreground">Admin Panel</span>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div className="flex-1 space-y-6 overflow-y-auto p-4">
-        <SidebarSection title="Exams" items={navigation} pathname={pathname} />
+      <div className={cn("flex-1 overflow-y-auto", compact ? "space-y-4 px-2 py-4" : "space-y-6 p-4")}>
+        <SidebarSection
+          title="Exams"
+          items={navigation}
+          pathname={pathname}
+          compact={compact}
+          onNavigate={onNavigate}
+        />
         <SidebarSection
           title="Management"
           items={managementNavigation}
           pathname={pathname}
+          compact={compact}
+          onNavigate={onNavigate}
         />
         <SidebarSection
           title="Support"
           items={secondaryNavigation}
           pathname={pathname}
+          compact={compact}
+          onNavigate={onNavigate}
         />
       </div>
 
-      <div className="space-y-4 border-t p-4">
-        <div className="flex items-center gap-3">
+      <div className={cn("space-y-4 border-t", compact ? "p-2" : "p-4")}>
+        <div className={cn("flex items-center", compact ? "justify-center" : "gap-3")}>
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
             <span className="text-xs font-medium">{user.initials}</span>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{user.name}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {user.email}
-            </p>
-          </div>
+          {!compact ? (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{user.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {user.email}
+              </p>
+            </div>
+          ) : null}
         </div>
         <Button
           type="button"
           variant="ghost"
-          className="w-full justify-start"
+          className={cn("w-full", compact ? "justify-center px-0" : "justify-start")}
           onClick={handleLogout}
+          aria-label="Logout"
         >
-          <IconLogout className="mr-2 h-4 w-4" />
-          Logout
+          <IconLogout className={cn("h-4 w-4", compact ? "" : "mr-2")} />
+          <span className={cn(compact ? "sr-only" : "")}>Logout</span>
         </Button>
       </div>
     </div>
@@ -175,6 +202,8 @@ function SidebarSection({
   title,
   items,
   pathname,
+  compact,
+  onNavigate,
 }: {
   title: string;
   items: Array<{
@@ -183,10 +212,17 @@ function SidebarSection({
     icon: typeof IconDashboard;
   }>;
   pathname: string;
+  compact: boolean;
+  onNavigate?: () => void;
 }) {
   return (
     <div className="space-y-2">
-      <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      <h3
+        className={cn(
+          "text-xs font-medium uppercase tracking-wider text-muted-foreground",
+          compact ? "px-1 text-center" : ""
+        )}
+      >
         {title}
       </h3>
       <nav className="space-y-1">
@@ -197,12 +233,12 @@ function SidebarSection({
             <Button
               key={item.href}
               variant={active ? "secondary" : "ghost"}
-              className="w-full justify-start"
+              className={cn("w-full", compact ? "justify-center px-0" : "justify-start")}
               asChild
             >
-              <Link href={item.href}>
-                <item.icon className="mr-2 h-4 w-4" />
-                {item.title}
+              <Link href={item.href} onClick={onNavigate} aria-label={item.title}>
+                <item.icon className={cn("h-4 w-4", compact ? "" : "mr-2")} />
+                <span className={cn(compact ? "sr-only" : "")}>{item.title}</span>
               </Link>
             </Button>
           );

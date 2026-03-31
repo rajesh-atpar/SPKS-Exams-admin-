@@ -1,13 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   IconCheck,
   IconDownload,
+  IconEdit,
   IconFileText,
   IconFolder,
   IconPlus,
   IconSearch,
+  IconTrash,
   IconUpload,
   IconVideo,
 } from "@tabler/icons-react";
@@ -43,11 +45,32 @@ type TreeNode = LeafNode | BranchNode;
 type DocumentRecord = {
   id: number;
   title: string;
-  target: string;
   type: string;
-  uploadedBy: string;
-  uploadDate: string;
-  status: "Published" | "Draft";
+  category: string;
+  size: string;
+  file_path: string;
+  uploaded_by: string;
+  status: string;
+  downloads: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type ApiResponse = {
+  success: boolean;
+  data: DocumentRecord[];
+  total: number;
+};
+
+type StatsData = {
+  totalDocuments: number;
+  published: number;
+  totalDownloads: number;
+  draftDocuments: number;
+  categoryBreakdown?: Array<{
+    category: string;
+    count: number;
+  }>;
 };
 
 const defaultUploadTarget = "Test / Group D / Full Test";
@@ -320,12 +343,58 @@ export default function RRBPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedTarget, setSelectedTarget] = useState(defaultUploadTarget);
   const [searchQuery, setSearchQuery] = useState("");
-  const [documents, setDocuments] = useState(recentDocuments);
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [stats, setStats] = useState<StatsData>({
+    totalDocuments: 0,
+    published: 0,
+    totalDownloads: 0,
+    draftDocuments: 0
+  });
   const [documentTitle, setDocumentTitle] = useState("");
   const [documentType, setDocumentType] = useState("PDF");
   const [documentAccess, setDocumentAccess] = useState("");
   const [documentDescription, setDocumentDescription] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<DocumentRecord | null>(null);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    category: '',
+    status: 'published'
+  });
+
+  // Fetch documents from backend
+  useEffect(() => {
+    fetchDocuments();
+    fetchStats();
+  }, []);
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await fetch('http://localhost:4000/api/rrb');
+      const data: ApiResponse = await response.json();
+      if (data.success) {
+        setDocuments(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      toast.error('Failed to fetch documents');
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('http://localhost:4000/api/rrb/stats');
+      const data = await response.json();
+      if (data.success) {
+        setStats(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
 
   const filteredTree = filterTree(rrbContentTree, searchQuery);
   const totalLeafNodes = countLeafNodes(rrbContentTree);
@@ -335,11 +404,11 @@ export default function RRBPage() {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     const matchesQuery =
       !normalizedQuery ||
-      `${document.title} ${document.target} ${document.type}`
+      `${document.title} ${document.category} ${document.type}`
         .toLowerCase()
         .includes(normalizedQuery);
 
-    return matchesQuery && document.target === selectedTarget;
+    return matchesQuery;
   });
 
   function openUploadForTarget(target: string) {
@@ -353,7 +422,114 @@ export default function RRBPage() {
     toast.success(`Upload ready for ${target}`);
   }
 
-  function handleUpload() {
+  const handleViewDocument = async (document: DocumentRecord) => {
+    try {
+      const response = await fetch(`http://localhost:4000/api/rrb/${document.id}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setSelectedDocument(data.data);
+        setShowDocumentModal(true);
+      } else {
+        toast.error('Failed to fetch document details');
+      }
+    } catch (error) {
+      console.error('View document error:', error);
+      toast.error('Failed to fetch document details');
+    }
+  };
+
+  const handleEditDocument = (document: DocumentRecord) => {
+    setSelectedDocument(document);
+    setEditForm({
+      title: document.title,
+      category: document.category,
+      status: document.status
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateDocument = async () => {
+    if (!selectedDocument) return;
+
+    try {
+      const response = await fetch(`http://localhost:4000/api/rrb/${selectedDocument.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editForm)
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success('Document updated successfully');
+        setShowEditModal(false);
+        fetchDocuments(); // Refresh documents list
+        fetchStats(); // Refresh stats
+      } else {
+        toast.error(data.error || 'Update failed');
+      }
+    } catch (error) {
+      console.error('Update error:', error);
+      toast.error('Update failed');
+    }
+  };
+
+  const handleDownload = async (document: DocumentRecord) => {
+    try {
+      // Download file directly from the download endpoint
+      const response = await fetch(`http://localhost:4000/api/rrb/${document.id}/download`);
+      
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = window.document.createElement('a');
+      a.href = url;
+      a.download = document.title;
+      window.document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      window.document.body.removeChild(a);
+      
+      // Refresh documents to update download count
+      fetchDocuments();
+      toast.success('Download completed successfully');
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Download failed');
+    }
+  };
+
+  const handleDelete = async (document: DocumentRecord) => {
+    if (!confirm(`Are you sure you want to delete "${document.title}"?`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`http://localhost:4000/api/rrb/${document.id}`, {
+        method: 'DELETE'
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Document deleted successfully');
+        fetchDocuments(); // Refresh documents list
+        fetchStats(); // Refresh stats
+      } else {
+        toast.error(data.error || 'Delete failed');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Delete failed');
+    }
+  };
+
+  async function handleUpload() {
     const trimmedTitle = documentTitle.trim();
     const trimmedAccess = documentAccess.trim();
 
@@ -369,19 +545,40 @@ export default function RRBPage() {
       return;
     }
 
-    setDocuments((currentDocuments) => [
-      {
-        id: Date.now(),
-        title: trimmedTitle,
-        target: selectedTarget,
-        type: documentType,
-        uploadedBy: "Admin",
-        uploadDate: new Date().toISOString().slice(0, 10),
-        status: "Draft",
-      },
-      ...currentDocuments,
-    ]);
+    setIsLoading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('title', trimmedTitle);
+      formData.append('category', selectedTarget);
+      formData.append('description', documentDescription);
+      
+      if (selectedFileName && fileInputRef.current?.files?.[0]) {
+        formData.append('file', fileInputRef.current.files[0]);
+      }
 
+      const response = await fetch('http://localhost:4000/api/rrb', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success(`Uploaded ${trimmedTitle} successfully!`);
+        fetchDocuments(); // Refresh the documents list
+        fetchStats(); // Refresh stats
+      } else {
+        toast.error(data.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Upload failed');
+    } finally {
+      setIsLoading(false);
+    }
+
+    // Reset form
     setDocumentTitle("");
     setDocumentAccess("");
     setDocumentDescription("");
@@ -390,8 +587,6 @@ export default function RRBPage() {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-
-    toast.success(`Uploaded ${trimmedTitle} to ${selectedTarget}`);
   }
 
   return (
@@ -400,11 +595,6 @@ export default function RRBPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">RRB Content Structure</h1>
-            <p className="max-w-3xl text-muted-foreground">
-              The page now follows your handwritten flow. Every final topic like
-              `Notes &gt; Mathematics`, `Test &gt; Group D &gt; Full Test`, and
-              `Test &gt; Others &gt; CBT 1 &gt; Topic Wise` has its own upload action.
-            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => openUploadForTarget(defaultUploadTarget)}>
@@ -421,41 +611,61 @@ export default function RRBPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Final Upload Points</CardTitle>
-              <CardDescription>Every leaf topic with its own upload button.</CardDescription>
+              <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
+              <CardDescription>All RRB documents</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalLeafNodes}</div>
+              <div className="text-2xl font-bold">{stats.totalDocuments}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Visible End Topics</CardTitle>
-              <CardDescription>Filtered by the search box below.</CardDescription>
+              <CardTitle className="text-sm font-medium">Published</CardTitle>
+              <CardDescription>Live documents</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{visibleLeafNodes}</div>
+              <div className="text-2xl font-bold">{stats.published}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Recent Uploads</CardTitle>
-              <CardDescription>Sample documents mapped to final topics.</CardDescription>
+              <CardTitle className="text-sm font-medium">Total Downloads</CardTitle>
+              <CardDescription>All time downloads</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{documents.length}</div>
+              <div className="text-2xl font-bold">{stats.totalDownloads}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Current Upload Target</CardTitle>
-              <CardDescription>The leaf topic selected for the form.</CardDescription>
+              <CardTitle className="text-sm font-medium">Draft Documents</CardTitle>
+              <CardDescription>Documents needing review</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm font-semibold text-foreground">{selectedTarget}</p>
+              <div className="text-2xl font-bold">{stats.draftDocuments}</div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Category Breakdown */}
+        {stats.categoryBreakdown && stats.categoryBreakdown.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Category Breakdown</CardTitle>
+              <CardDescription>Documents by category</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {stats.categoryBreakdown.map((cat, index) => (
+                  <div key={index} className="flex justify-between items-center p-3 border rounded-lg">
+                    <span className="text-sm font-medium">{cat.category}</span>
+                    <Badge variant="secondary">{cat.count}</Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Alert>
           <IconCheck className="h-4 w-4" />
@@ -622,7 +832,7 @@ export default function RRBPage() {
                       <Badge variant="outline">{document.type}</Badge>
                       <Badge
                         className={cn(
-                          document.status === "Published"
+                          document.status === "published"
                             ? "bg-green-100 text-green-800"
                             : "bg-yellow-100 text-yellow-800"
                         )}
@@ -630,20 +840,177 @@ export default function RRBPage() {
                         {document.status}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">{document.target}</p>
+                    <p className="text-sm text-muted-foreground">{document.category}</p>
                     <p className="text-xs text-muted-foreground">
-                      Uploaded by {document.uploadedBy} on {document.uploadDate}
+                      Uploaded by {document.uploaded_by} on {new Date(document.created_at).toISOString().slice(0, 10)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Size: {document.size} | Downloads: {document.downloads}
                     </p>
                   </div>
-                  <Button type="button" variant="outline">
-                    <IconDownload className="mr-2 h-4 w-4" />
-                    Download
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={() => handleViewDocument(document)}>
+                      <IconFileText className="mr-2 h-4 w-4" />
+                      View
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => handleEditDocument(document)}>
+                      <IconEdit className="mr-2 h-4 w-4" />
+                      Edit
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => handleDownload(document)}>
+                      <IconDownload className="mr-2 h-4 w-4" />
+                      Download
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => handleDelete(document)}>
+                      <IconTrash className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               ))
             )}
           </CardContent>
         </Card>
+
+        {/* Document Details Modal */}
+        {showDocumentModal && selectedDocument && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h2 className="text-2xl font-bold">{selectedDocument.title}</h2>
+                  <Button variant="ghost" onClick={() => setShowDocumentModal(false)}>
+                    ×
+                  </Button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">{selectedDocument.type}</Badge>
+                    <Badge className={
+                      selectedDocument.status === "published"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-yellow-100 text-yellow-800"
+                    }>
+                      {selectedDocument.status}
+                    </Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium">Category:</span>
+                      <p className="text-muted-foreground">{selectedDocument.category}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Size:</span>
+                      <p className="text-muted-foreground">{selectedDocument.size}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Uploaded By:</span>
+                      <p className="text-muted-foreground">{selectedDocument.uploaded_by}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Downloads:</span>
+                      <p className="text-muted-foreground">{selectedDocument.downloads}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Created:</span>
+                      <p className="text-muted-foreground">
+                        {new Date(selectedDocument.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium">Updated:</span>
+                      <p className="text-muted-foreground">
+                        {new Date(selectedDocument.updated_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2 pt-4">
+                    <Button onClick={() => handleDownload(selectedDocument)}>
+                      <IconDownload className="mr-2 h-4 w-4" />
+                      Download
+                    </Button>
+                    <Button variant="outline" onClick={() => handleDelete(selectedDocument)}>
+                      <IconTrash className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Document Modal */}
+        {showEditModal && selectedDocument && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-md w-full">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h2 className="text-xl font-bold">Edit Document</h2>
+                  <Button variant="ghost" onClick={() => setShowEditModal(false)}>
+                    ×
+                  </Button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-title">Title</Label>
+                    <Input
+                      id="edit-title"
+                      value={editForm.title}
+                      onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                      placeholder="Enter document title"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-category">Category</Label>
+                    <select
+                      id="edit-category"
+                      className="w-full p-2 border rounded-md"
+                      value={editForm.category}
+                      onChange={(e) => setEditForm({...editForm, category: e.target.value})}
+                    >
+                      <option value="">Select category</option>
+                      <option value="Syllabus">Syllabus</option>
+                      <option value="Previous Papers">Previous Papers</option>
+                      <option value="Study Material">Study Material</option>
+                      <option value="Test Category">Test Category</option>
+                      <option value="Notes / Mathematics">Notes / Mathematics</option>
+                    </select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-status">Status</Label>
+                    <select
+                      id="edit-status"
+                      className="w-full p-2 border rounded-md"
+                      value={editForm.status}
+                      onChange={(e) => setEditForm({...editForm, status: e.target.value})}
+                    >
+                      <option value="published">Published</option>
+                      <option value="draft">Draft</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                  </div>
+                  
+                  <div className="flex gap-2 pt-4">
+                    <Button onClick={handleUpdateDocument}>
+                      <IconEdit className="mr-2 h-4 w-4" />
+                      Update
+                    </Button>
+                    <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

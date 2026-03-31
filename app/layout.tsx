@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SiteCredit } from "@/components/site-credit";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -18,6 +19,7 @@ export default function RootLayout({
       <body className="min-h-svh bg-background text-foreground antialiased">
         <TooltipProvider>
           {children}
+          <SiteCredit />
           <Toaster />
         </TooltipProvider>
       </body>

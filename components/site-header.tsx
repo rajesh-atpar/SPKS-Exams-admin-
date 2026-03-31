@@ -1,13 +1,24 @@
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
 import { IconBell, IconMenu } from "@tabler/icons-react"
 
-export function SiteHeader() {
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+
+export function SiteHeader({
+  onToggleSidebar,
+}: {
+  onToggleSidebar?: () => void
+}) {
   return (
-    <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="h-24 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-full items-center gap-4 px-6">
-        <Button variant="ghost" size="icon">
+        <Button
+          variant="ghost"
+          size="icon"
+          type="button"
+          onClick={onToggleSidebar}
+          aria-label="Toggle sidebar"
+        >
           <IconMenu className="h-4 w-4" />
         </Button>
         <Separator orientation="vertical" className="h-6" />

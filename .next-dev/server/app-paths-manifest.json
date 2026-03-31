@@ -1,7 +1,6 @@
 {
-  "/admin/tnpsc/page": "app/admin/tnpsc/page.js",
-  "/admin/students/page": "app/admin/students/page.js",
-  "/admin/analytics/page": "app/admin/analytics/page.js",
-  "/admin/rrb/page": "app/admin/rrb/page.js",
-  "/admin/page": "app/admin/page.js"
+  "/login/page": "app/login/page.js",
+  "/admin/page": "app/admin/page.js",
+  "/admin/tnusrb/page": "app/admin/tnusrb/page.js",
+  "/admin/rrb/page": "app/admin/rrb/page.js"
 }
