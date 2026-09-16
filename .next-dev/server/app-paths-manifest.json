@@ -1,7 +1,9 @@
 {
-  "/(dashboard)/videos/page": "app/(dashboard)/videos/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/login/page": "app/login/page.js",
   "/(dashboard)/users/page": "app/(dashboard)/users/page.js",
   "/(dashboard)/catalog/page": "app/(dashboard)/catalog/page.js",
   "/(dashboard)/content/page": "app/(dashboard)/content/page.js",
-  "/(dashboard)/current-affairs/page": "app/(dashboard)/current-affairs/page.js"
+  "/(dashboard)/current-affairs/page": "app/(dashboard)/current-affairs/page.js",
+  "/(dashboard)/page": "app/(dashboard)/page.js"
 }
