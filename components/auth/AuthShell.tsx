@@ -12,10 +12,10 @@ import { Separator } from "@/components/ui/separator";
 
 const shellContent = {
   login: {
-    eyebrow: "Unified admin workspace",
-    title: "Run exams, schedules, and oversight from one polished interface.",
+    eyebrow: "SPKS staff CMS",
+    title: "Manage catalog, tests, and students from one admin workspace.",
     description:
-      "The UI now centers around reusable shadcn components so your auth flow and admin tools feel like one system instead of separate screens.",
+      "Staff login only. Use your admin, editor, or support account — student accounts belong in the mobile app.",
     stats: [
       { label: "Exam centers managed", value: "24" },
       { label: "Live sessions tracked", value: "128" },

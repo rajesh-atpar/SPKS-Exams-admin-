@@ -1,4 +1,4 @@
-// File: /home/rajee/Music/SPKS-Exams-admin-/app/admin/page.tsx
+// File: C:\Users\vicky\rajesh\SPKS-Exams-admin-\app\admin\page.tsx
 import * as entry from '../../../../app/admin/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

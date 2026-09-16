@@ -1,9 +1,5 @@
-import { AdminLayout } from "./AdminLayout";
+import { redirect } from "next/navigation";
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <AdminLayout>{children}</AdminLayout>;
+export default function AdminRedirect() {
+  redirect("/");
 }

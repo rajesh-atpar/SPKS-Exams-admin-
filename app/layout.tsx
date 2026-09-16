@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
+
+import { Providers } from "@/components/providers";
 import { SiteCredit } from "@/components/site-credit";
-import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SPKS Exams Admin",
-  description: "Admin panel for SPKS Exams",
+  title: "SPKS Admin",
+  description: "Staff CMS for SPKS exam-prep courses, tests, and content",
 };
 
 export default function RootLayout({
@@ -18,9 +19,10 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-svh bg-background text-foreground antialiased">
         <TooltipProvider>
-          {children}
-          <SiteCredit />
-          <Toaster />
+          <Providers>
+            {children}
+            <SiteCredit />
+          </Providers>
         </TooltipProvider>
       </body>
     </html>

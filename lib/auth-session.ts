@@ -1,108 +1,87 @@
-export type StoredUser = {
-  id?: string;
-  email: string;
-  fullName?: string;
-};
+import type { StaffUser } from "@/lib/types";
 
-const TOKEN_KEY = "token";
-const USER_KEY = "user";
+const ACCESS_KEY = "spks_access_token";
+const REFRESH_KEY = "spks_refresh_token";
+const USER_KEY = "spks_user";
 
-function isStoredUser(value: unknown): value is StoredUser {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as StoredUser;
-  return typeof candidate.email === "string";
+function canUseStorage() {
+  return typeof window !== "undefined";
 }
 
 export function getStoredToken(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
+  return getAccessToken();
+}
 
+export function getAccessToken(): string | null {
+  if (!canUseStorage()) return null;
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(ACCESS_KEY);
   } catch {
     return null;
   }
 }
 
-export function getStoredUser(): StoredUser | null {
-  if (typeof window === "undefined") {
+export function getRefreshToken(): string | null {
+  if (!canUseStorage()) return null;
+  try {
+    return localStorage.getItem(REFRESH_KEY);
+  } catch {
     return null;
   }
+}
 
+export function getStoredUser(): StaffUser | null {
+  if (!canUseStorage()) return null;
   try {
-    const rawUser = localStorage.getItem(USER_KEY);
-    if (!rawUser) {
-      return null;
-    }
-
-    const parsedUser = JSON.parse(rawUser);
-    return isStoredUser(parsedUser) ? parsedUser : null;
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StaffUser;
+    return parsed?.email ? parsed : null;
   } catch {
     return null;
   }
 }
 
 export function storeAuthSession(session: {
-  token?: string | null;
-  user?: unknown;
+  accessToken?: string | null;
+  refreshToken?: string | null;
+  user?: StaffUser | null;
 }) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
+  if (!canUseStorage()) return;
   try {
-    if (session.token) {
-      localStorage.setItem(TOKEN_KEY, session.token);
-    }
-
-    if (isStoredUser(session.user)) {
-      localStorage.setItem(USER_KEY, JSON.stringify(session.user));
-    }
-  } catch {}
+    if (session.accessToken) localStorage.setItem(ACCESS_KEY, session.accessToken);
+    if (session.refreshToken) localStorage.setItem(REFRESH_KEY, session.refreshToken);
+    if (session.user) localStorage.setItem(USER_KEY, JSON.stringify(session.user));
+  } catch {
+    // Ignore quota / private-mode failures.
+  }
 }
 
 export function clearAuthSession() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
+  if (!canUseStorage()) return;
   try {
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ACCESS_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
-  } catch {}
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+  } catch {
+    // Ignore storage failures.
+  }
 }
 
-export function getUserDisplayName(user: StoredUser | null): string {
-  if (!user) {
-    return "Admin";
-  }
-
-  const trimmedName = user.fullName?.trim();
-  if (trimmedName) {
-    return trimmedName;
-  }
-
-  const emailName = user.email.split("@")[0]?.trim();
-  return emailName || "Admin";
+export function getUserDisplayName(user: StaffUser | null): string {
+  if (!user) return "Staff";
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (name) return name;
+  return user.email.split("@")[0] || "Staff";
 }
 
-export function getUserInitials(user: StoredUser | null): string {
-  if (!user) {
-    return "AD";
+export function getUserInitials(user: StaffUser | null): string {
+  const name = getUserDisplayName(user);
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   }
-
-  const trimmedName = user.fullName?.trim();
-  if (trimmedName) {
-    return trimmedName
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part.charAt(0).toUpperCase())
-      .join("");
-  }
-
-  return user.email.slice(0, 2).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
 }

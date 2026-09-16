@@ -1,6 +1,7 @@
 {
-  "/login/page": "app/login/page.js",
-  "/admin/page": "app/admin/page.js",
-  "/admin/tnusrb/page": "app/admin/tnusrb/page.js",
-  "/admin/rrb/page": "app/admin/rrb/page.js"
+  "/(dashboard)/videos/page": "app/(dashboard)/videos/page.js",
+  "/(dashboard)/users/page": "app/(dashboard)/users/page.js",
+  "/(dashboard)/catalog/page": "app/(dashboard)/catalog/page.js",
+  "/(dashboard)/content/page": "app/(dashboard)/content/page.js",
+  "/(dashboard)/current-affairs/page": "app/(dashboard)/current-affairs/page.js"
 }
