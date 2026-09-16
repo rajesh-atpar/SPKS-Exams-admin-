@@ -9,8 +9,19 @@ import {
 } from "@/lib/auth-session";
 import type { ApiEnvelope, ApiMeta, AuthPayload, PaginationQuery } from "@/lib/types";
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:4000";
+const DEFAULT_API_URL = "https://spks-exams-backend.vercel.app";
+
+function resolveApiBase() {
+  const raw = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL).trim();
+  return (
+    raw
+      .replace(/\/+$/, "")
+      .replace(/\/api-docs$/i, "")
+      .replace(/\/api$/i, "") || DEFAULT_API_URL
+  );
+}
+
+export const API_BASE = resolveApiBase();
 
 export class ApiError extends Error {
   status: number;
