@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, ClipboardList } from "lucide-react";
 
 import { apiPatch, toastApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -29,6 +30,7 @@ export default function UsersPage() {
   const { user } = useAuth();
   const writable = canWrite(user?.role, "users");
   const canStatus = canWrite(user?.role, "users.status");
+  const router = useRouter();
   const list = useListQuery();
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
@@ -149,6 +151,16 @@ export default function UsersPage() {
           setOpen(true);
         }}
         onDelete={canStatus ? setDeleting : undefined}
+        extraActions={(row) => (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Test history"
+            onClick={() => router.push(`/users/${row.id}/results`)}
+          >
+            <ClipboardList className="size-4" />
+          </Button>
+        )}
         filters={
           <>
             <Select value={role} onValueChange={setRole}>

@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiGet, apiPatch, apiPost, apiUpload, toastApiError, uploadedUrl } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { canWrite } from "@/lib/permissions";
-import { deleteResource } from "@/lib/use-resource";
+import { deleteResource, useResourceList } from "@/lib/use-resource";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { PageHeader } from "@/components/admin/PageHeader";
+import { ResourceTable } from "@/components/admin/ResourceTable";
+import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,7 +37,29 @@ type TestDetail = {
   title: string;
   description?: string;
   duration?: number;
+  groupId?: string;
+  totalQuestions?: number;
+  totalMarks?: number;
+  isPublished?: boolean;
   questions?: Question[];
+};
+
+type TestResult = {
+  id: string;
+  attemptId?: string;
+  resultId?: string;
+  userId?: string;
+  testId?: string;
+  title?: string;
+  testTitle?: string;
+  score?: number;
+  totalMarks?: number;
+  correct?: number;
+  incorrect?: number;
+  unanswered?: number;
+  percentage?: number;
+  passed?: boolean;
+  submittedAt?: string;
 };
 
 const blankQuestion = (): Question => ({
@@ -47,9 +71,19 @@ const blankQuestion = (): Question => ({
 });
 
 export default function TestDetailPage() {
+  return (
+    <Suspense>
+      <TestDetailPageInner />
+    </Suspense>
+  );
+}
+
+function TestDetailPageInner() {
   const params = useParams<{ testId: string }>();
+  const search = useSearchParams();
   const testId = params?.testId || "";
   const router = useRouter();
+  const initialTab = search?.get("tab") === "results" ? "results" : "editor";
   const { user } = useAuth();
   const writable = canWrite(user?.role, "tests");
   const [test, setTest] = useState<TestDetail | null>(null);
@@ -74,13 +108,18 @@ export default function TestDetailPage() {
 
   async function saveQuestion() {
     const options = draft.options.map((item) => item.trim()).filter(Boolean);
-    if (!draft.question.trim() || options.length < 2 || !draft.correctAnswer) {
+    const correctAnswer = draft.correctAnswer.trim();
+    if (!draft.question.trim() || options.length < 2 || !correctAnswer) {
       toast.error("Question, at least two options, and a correct answer are required");
+      return;
+    }
+    if (!options.includes(correctAnswer)) {
+      toast.error("correctAnswer must match one option exactly");
       return;
     }
     setPending(true);
     try {
-      const body = { ...draft, options };
+      const body = { ...draft, options, correctAnswer };
       if (editingId) {
         await apiPatch(`/api/admin/questions/${editingId}`, body);
         toast.success("Question updated");
@@ -104,17 +143,18 @@ export default function TestDetailPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <PageHeader
         title={test?.title || "Test"}
-        description="Add options, pick the correct answer, then preview the paper."
+        description="Add options, pick the correct answer (must match an option exactly), then review student results."
         action={
           <Button variant="outline" onClick={() => router.push("/tests")}>
             Back to tests
           </Button>
         }
       />
-      <Tabs defaultValue="editor">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="editor">Question editor</TabsTrigger>
           <TabsTrigger value="preview">Preview paper</TabsTrigger>
+          <TabsTrigger value="results">Results</TabsTrigger>
         </TabsList>
         <TabsContent value="editor" className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card>
@@ -217,7 +257,9 @@ export default function TestDetailPage() {
                     </Button>
                   </div>
                 ))}
-                <p className="text-xs text-muted-foreground">Select the radio next to the correct answer.</p>
+                <p className="text-xs text-muted-foreground">
+                  Select the radio next to the correct answer. The stored value must match that option text exactly.
+                </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="grid gap-2">
@@ -352,6 +394,9 @@ export default function TestDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="results">
+          <TestResultsTable testId={testId} />
+        </TabsContent>
       </Tabs>
       <ConfirmDialog
         open={Boolean(deleting)}
@@ -372,6 +417,58 @@ export default function TestDetailPage() {
         }}
       />
     </div>
+  );
+}
+
+function TestResultsTable({ testId }: { testId: string }) {
+  const router = useRouter();
+  const { items, meta, loading } = useResourceList<TestResult>(
+    `/api/admin/tests/${testId}/results`,
+    { page: 1, limit: 20 }
+  );
+
+  return (
+    <ResourceTable
+      columns={[
+        { key: "userId", header: "User" },
+        {
+          key: "score",
+          header: "Score",
+          render: (row) => `${row.score ?? 0} / ${row.totalMarks ?? 0}`,
+        },
+        {
+          key: "percentage",
+          header: "%",
+          render: (row) => (row.percentage != null ? `${row.percentage}` : "—"),
+        },
+        {
+          key: "passed",
+          header: "Passed",
+          render: (row) => <StatusBadge value={row.passed} />,
+        },
+        {
+          key: "submittedAt",
+          header: "Submitted",
+          render: (row) => (row.submittedAt ? new Date(row.submittedAt).toLocaleString() : "—"),
+        },
+      ]}
+      rows={items.map((row) => ({ ...row, id: row.attemptId || row.id }))}
+      loading={loading}
+      page={meta.page}
+      totalPages={meta.totalPages}
+      total={meta.total}
+      emptyTitle="No results yet"
+      emptyDescription="Results appear after a student finishes this test."
+      extraActions={(row) => (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => router.push(`/tests/${testId}/attempts/${row.attemptId || row.id}`)}
+        >
+          Answers
+        </Button>
+      )}
+    />
   );
 }
 
