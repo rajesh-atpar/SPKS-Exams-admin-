@@ -63,8 +63,27 @@ export default function LegalPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title="Legal"
-        description="Markdown or plain text. Only admins can save. Public preview uses /api/legal/*."
+        description="Markdown or plain text. Only admins can save. Public Play Store pages stay open without login."
       />
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Google Play public URLs</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>
+            Privacy policy:{" "}
+            <a className="text-primary underline" href="/privacy-policy.html" target="_blank" rel="noreferrer">
+              /privacy-policy.html
+            </a>
+          </p>
+          <p>
+            Delete account:{" "}
+            <a className="text-primary underline" href="/delete-account.html" target="_blank" rel="noreferrer">
+              /delete-account.html
+            </a>
+          </p>
+        </CardContent>
+      </Card>
       <Tabs value={active} onValueChange={(value) => setActive(value as typeof active)}>
         <TabsList>
           {docs.map((doc) => (

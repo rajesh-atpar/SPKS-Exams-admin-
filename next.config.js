@@ -15,6 +15,12 @@ const nextConfig = {
   // Keep dev and production artifacts separate so a running `next dev`
   // does not break after a production build writes a different chunk layout.
   distDir: isDev ? ".next-dev" : ".next",
+  async rewrites() {
+    return [
+      { source: "/privacy-policy", destination: "/privacy-policy.html" },
+      { source: "/delete-account", destination: "/delete-account.html" },
+    ];
+  },
 };
 
 export default nextConfig;
