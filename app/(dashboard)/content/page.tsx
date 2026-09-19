@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 
-import { apiGet, apiUpload, toastApiError, uploadedUrl } from "@/lib/api-client";
+import { apiGet, apiUpload, listFrom, toastApiError, uploadedUrl } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { canWrite } from "@/lib/permissions";
 import { createResource, deleteResource, loadForEdit, updateResource, useResourceList } from "@/lib/use-resource";
@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+type CatalogOption = { id: string; name: string };
+
 type ContentItem = {
   id: string;
   title: string;
@@ -31,9 +33,10 @@ type ContentItem = {
   isPublished?: boolean;
   fileUrl?: string;
   courseId?: string;
+  groupId?: string;
 };
 
-const contentTypes = ["pdf", "book", "note", "article", "outside-source", "lesson"];
+const contentTypes = ["note", "book", "outside-source", "pdf"];
 
 export default function ContentPage() {
   return (
@@ -47,33 +50,58 @@ function ContentPageInner() {
   const { user } = useAuth();
   const writable = canWrite(user?.role, "content");
   const params = useSearchParams();
-  const courseId = params?.get("courseId") || "";
+  const courseFromUrl = params?.get("courseId") || "";
+  const groupFromUrl = params?.get("groupId") || "";
   const typeFromUrl = params?.get("contentType") || "all";
   const list = useListQuery();
+  const [courseId, setCourseId] = useState(courseFromUrl || "all");
+  const [groupId, setGroupId] = useState(groupFromUrl || "all");
   const [contentType, setContentType] = useState(typeFromUrl);
-  useEffect(() => {
-    setContentType(typeFromUrl);
-  }, [typeFromUrl]);
-  const query = useMemo(
-    () => ({
-      ...list.query,
-      contentType: contentType === "all" ? undefined : contentType,
-      courseId: courseId || undefined,
-    }),
-    [list.query, contentType, courseId]
-  );
-  const { items, meta, loading, reload } = useResourceList<ContentItem>("/api/admin/content", query);
+  const [courses, setCourses] = useState<CatalogOption[]>([]);
+  const [groups, setGroups] = useState<CatalogOption[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ContentItem | null>(null);
   const [pending, setPending] = useState(false);
   const [deleting, setDeleting] = useState<ContentItem | null>(null);
-  const [courses, setCourses] = useState<Array<{ id: string; name: string }>>([]);
 
-  useMemo(() => {
-    apiGet<Array<{ id: string; name: string }>>("/api/admin/courses", { limit: 100 })
-      .then((res) => setCourses(Array.isArray(res.data) ? res.data : []))
+  useEffect(() => {
+    setContentType(typeFromUrl);
+  }, [typeFromUrl]);
+
+  useEffect(() => {
+    if (courseFromUrl) setCourseId(courseFromUrl);
+    if (groupFromUrl) setGroupId(groupFromUrl);
+  }, [courseFromUrl, groupFromUrl]);
+
+  useEffect(() => {
+    apiGet<CatalogOption[]>("/api/admin/courses", { limit: 100 })
+      .then((res) => setCourses(Array.isArray(res.data) ? res.data : listFrom(res).items))
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (courseId === "all") {
+      setGroups([]);
+      return;
+    }
+    apiGet<CatalogOption[]>("/api/admin/groups", { courseId, limit: 100 })
+      .then((res) => setGroups(Array.isArray(res.data) ? res.data : listFrom(res).items))
+      .catch(() => setGroups([]));
+  }, [courseId]);
+
+  const query = useMemo(
+    () => ({
+      ...list.query,
+      contentType: contentType === "all" ? undefined : contentType,
+      courseId: courseId !== "all" ? courseId : undefined,
+      groupId: groupId !== "all" ? groupId : undefined,
+    }),
+    [list.query, contentType, courseId, groupId]
+  );
+  const { items, meta, loading, reload } = useResourceList<ContentItem>("/api/admin/content", query);
+
+  const selectedGroup = groups.find((group) => group.id === groupId);
+  const canCreate = writable && groupId !== "all";
 
   const fields: FormField[] = [
     { name: "title", label: "Title", required: true },
@@ -86,12 +114,14 @@ function ContentPageInner() {
       options: contentTypes.map((value) => ({ label: value, value })),
     },
     {
-      name: "courseId",
-      label: "Course",
-      type: "select",
-      options: courses.map((course) => ({ label: course.name, value: course.id })),
+      name: "file",
+      label: "Upload file",
+      type: "file",
+      accept: "application/pdf,image/jpeg,image/png,image/webp",
+      hint: "POST /api/admin/content/upload (field: file) → fileUrl. Do not send the binary as JSON.",
+      previewUrl: editing?.fileUrl || undefined,
+      previewLabel: "View current file",
     },
-    { name: "file", label: "Upload file", type: "file", accept: "application/pdf,image/jpeg,image/png,image/webp", hint: "PDF or image, max 25MB" },
     { name: "fileUrl", label: "File URL" },
     { name: "thumbnailUrl", label: "Thumbnail URL" },
     { name: "language", label: "Language" },
@@ -103,13 +133,9 @@ function ContentPageInner() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Content"
-        description={
-          courseId
-            ? "Course media for this catalog course. Types: pdf, book, note, article, outside-source, lesson."
-            : "PDFs, books, notes, articles, and outside sources attached to a course."
-        }
+        description="Pick a course, then a group. Notes, books, outside sources, and PDFs attach to that group (same place as videos and tests)."
         action={
-          writable ? (
+          canCreate ? (
             <Button
               onClick={() => {
                 setEditing(null);
@@ -126,6 +152,11 @@ function ContentPageInner() {
         columns={[
           { key: "title", header: "Title" },
           { key: "contentType", header: "Type" },
+          {
+            key: "groupId",
+            header: "Group",
+            render: (row) => groups.find((group) => group.id === row.groupId)?.name || row.groupId || "—",
+          },
           { key: "language", header: "Language" },
           { key: "isPremium", header: "Premium", render: (row) => <StatusBadge value={row.isPremium} /> },
           { key: "isPublished", header: "Published", render: (row) => <StatusBadge value={row.isPublished} /> },
@@ -147,29 +178,80 @@ function ContentPageInner() {
         }}
         onDelete={setDeleting}
         filters={
-          <Select value={contentType} onValueChange={setContentType}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
-              {contentTypes.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <>
+            <Select
+              value={courseId}
+              onValueChange={(value) => {
+                setCourseId(value);
+                setGroupId("all");
+              }}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Course" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All courses</SelectItem>
+                {courses.map((course) => (
+                  <SelectItem key={course.id} value={course.id}>
+                    {course.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={groupId} onValueChange={setGroupId} disabled={courseId === "all"}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Group" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All groups</SelectItem>
+                {groups.map((group) => (
+                  <SelectItem key={group.id} value={group.id}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={contentType} onValueChange={setContentType}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                {contentTypes.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        }
+        emptyTitle={groupId === "all" && courseId !== "all" ? "Pick a group" : "No content yet"}
+        emptyDescription={
+          courseId === "all"
+            ? "Filter by course, then a group, then add notes or books."
+            : groupId === "all"
+              ? "Choose a group to list and create content for that catalog branch."
+              : `Create content for ${selectedGroup?.name || "this group"}.`
         }
       />
       <EntityFormSheet
         open={open}
-        title={editing ? "Edit content" : "Create content"}
+        title={
+          editing
+            ? "Edit content"
+            : `Create content${selectedGroup ? ` · ${selectedGroup.name}` : ""}`
+        }
         fields={fields}
         initialValues={
           editing
             ? { ...editing, file: undefined }
-            : { contentType: contentType === "all" ? "pdf" : contentType, courseId: courseId || undefined, isPremium: false, isPublished: false }
+            : {
+                contentType: contentType === "all" ? "note" : contentType,
+                isPremium: false,
+                isPublished: true,
+                file: undefined,
+              }
         }
         pending={pending}
         onOpenChange={setOpen}
@@ -182,6 +264,11 @@ function ContentPageInner() {
             if (file instanceof File) {
               const uploaded = await apiUpload("/api/admin/content/upload", file);
               body.fileUrl = uploadedUrl(uploaded.data) || body.fileUrl;
+            }
+            if (!editing) {
+              if (groupId === "all") throw new Error("Select a group before creating content");
+              body.groupId = groupId;
+              if (courseId !== "all") body.courseId = courseId;
             }
             if (editing) await updateResource(`/api/admin/content/${editing.id}`, body);
             else await createResource("/api/admin/content", body);

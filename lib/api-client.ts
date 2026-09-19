@@ -163,7 +163,7 @@ export async function apiDelete<T>(url: string) {
 export async function apiUpload<T>(url: string, file: File, fieldName = "file") {
   const form = new FormData();
   form.append(fieldName, file);
-  const { data } = await api.post<ApiEnvelope<T>>(url, form);
+  const { data } = await api.post<ApiEnvelope<T>>(url, form, { timeout: 120000 });
   return data;
 }
 

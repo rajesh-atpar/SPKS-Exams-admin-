@@ -3,14 +3,17 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, ChevronRight, FileText, Globe, NotebookPen, Plus, Video } from "lucide-react";
+import { BookOpen, ChevronRight, FileText, Globe, NotebookPen, Plus, Upload, Video } from "lucide-react";
 
-import { apiGet, toastApiError } from "@/lib/api-client";
+import { toast } from "sonner";
+
+import { apiGet, apiUpload, toastApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { canWrite } from "@/lib/permissions";
 import { createResource, deleteResource, loadForEdit, updateResource, useResourceList } from "@/lib/use-resource";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { emptyToUndefined, EntityFormSheet, type FormField } from "@/components/admin/EntityFormSheet";
+import { LessonPdfDialog } from "@/components/admin/LessonPdfDialog";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { ResourceTable, useListQuery } from "@/components/admin/ResourceTable";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -29,6 +32,9 @@ type CatalogRow = {
   displayOrder?: number;
   content?: string;
   duration?: number;
+  pdfUrl?: string | null;
+  pdfPath?: string | null;
+  pdfViewUrl?: string | null;
 };
 
 type Level = "course" | "group" | "class" | "subject" | "chapter" | "lesson";
@@ -44,16 +50,33 @@ const labels: Record<Level, { plural: string; singular: string; child?: Level }>
 
 const descriptions: Record<Level, string> = {
   course:
-    "Catalog tree: Course → Group → Class → Subject. Admin lists include unpublished items. Click a course to open groups and course media.",
-  group: "Groups are categories under this course. Click a group to open its classes.",
-  class: "Classes under this group. Click a class to open its subjects.",
+    "Catalog tree: Course → Group → Class → Subject → Chapter → Lesson. Open a group for School Books and group media (notes, videos, tests).",
+  group: "Groups under this course. Open a group for School Books (Classes → …) and Notes / Books / Videos / Tests.",
+  class: "School books: Classes under this group. Click a class to open its subjects.",
   subject:
-    "Subjects are the last catalog entity. Click a subject to manage chapters and lessons (content, not catalog.service).",
+    "Subjects under this class. Click a subject to manage chapters and lessons.",
   chapter: "Chapters belong to content, not catalog. Click a chapter to manage lessons.",
-  lesson: "Lessons are content under a chapter.",
+  lesson: "Lessons are content under a chapter. Save lesson metadata as JSON, then attach the PDF as multipart (field: file).",
 };
 
-function fieldsFor(level: Level): FormField[] {
+async function attachLessonPdf(lessonId: string, file: File) {
+  if (file.type && file.type !== "application/pdf") {
+    throw new Error("Only PDF files are allowed.");
+  }
+  const res = await apiUpload<{ pdfUrl?: string | null; pdfViewUrl?: string | null }>(
+    `/api/admin/lessons/${lessonId}/pdf`,
+    file,
+    "file"
+  );
+  if (!res.data || !(res.data.pdfUrl || res.data.pdfViewUrl)) {
+    throw new Error(
+      "PDF was not saved on the lesson (data is null). Run database/migrations/2026-09-18-lesson-pdfs.sql in Supabase, reload schema, then upload again."
+    );
+  }
+  toast.success(res.message || "Lesson PDF updated");
+}
+
+function fieldsFor(level: Level, editing?: CatalogRow | null): FormField[] {
   if (level === "chapter") {
     return [
       { name: "title", label: "Title", required: true },
@@ -63,12 +86,24 @@ function fieldsFor(level: Level): FormField[] {
     ];
   }
   if (level === "lesson") {
+    const currentPdf = editing?.pdfUrl || editing?.pdfViewUrl || undefined;
     return [
       { name: "title", label: "Title", required: true },
       { name: "description", label: "Description", type: "textarea" },
       { name: "content", label: "Content", type: "textarea" },
       { name: "duration", label: "Duration (minutes)", type: "number" },
       { name: "displayOrder", label: "Display order", type: "number" },
+      {
+        name: "file",
+        label: "PDF",
+        type: "file",
+        accept: "application/pdf",
+        hint: currentPdf
+          ? "Leave empty to keep the current PDF. Choosing a file replaces it after save."
+          : "Optional. Saved after the lesson is created (multipart field: file).",
+        previewUrl: currentPdf,
+        previewLabel: "View current PDF",
+      },
       { name: "isPublished", label: "Published", type: "switch" },
     ];
   }
@@ -156,23 +191,28 @@ function CatalogTreeBar({
   );
 }
 
-function CourseMediaLinks({ courseId }: { courseId: string }) {
+function GroupMediaLinks({ courseId, groupId }: { courseId: string; groupId: string }) {
+  const qs = `courseId=${courseId}&groupId=${groupId}`;
   const links = [
-    { href: `/content?courseId=${courseId}`, label: "All content", icon: FileText },
-    { href: `/content?courseId=${courseId}&contentType=note`, label: "Notes", icon: NotebookPen },
-    { href: `/content?courseId=${courseId}&contentType=book`, label: "Books", icon: BookOpen },
+    { href: `/content?${qs}&contentType=note`, label: "Notes", icon: NotebookPen },
+    { href: `/content?${qs}&contentType=book`, label: "Books", icon: BookOpen },
     {
-      href: `/content?courseId=${courseId}&contentType=outside-source`,
+      href: `/content?${qs}&contentType=outside-source`,
       label: "Outside sources",
       icon: Globe,
     },
-    { href: `/videos?courseId=${courseId}`, label: "Videos", icon: Video },
-    { href: `/tests?courseId=${courseId}`, label: "Tests", icon: BookOpen },
+    { href: `/content?${qs}&contentType=pdf`, label: "PDFs", icon: FileText },
+    { href: `/videos?${qs}`, label: "Videos", icon: Video },
+    { href: `/tests?${qs}`, label: "Tests", icon: BookOpen },
   ];
   return (
     <div className="mb-4 rounded-lg border bg-card p-3">
       <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        Course media
+        Group media
+      </p>
+      <p className="mb-2 text-sm text-muted-foreground">
+        School books stay in this tree (Classes → Subjects → Chapters → Lessons). Notes, books,
+        videos, and tests attach to this group.
       </p>
       <div className="flex flex-wrap gap-2">
         {links.map((item) => (
@@ -234,6 +274,7 @@ function CatalogPageInner() {
   const [editing, setEditing] = useState<CatalogRow | null>(null);
   const [pending, setPending] = useState(false);
   const [deleting, setDeleting] = useState<CatalogRow | null>(null);
+  const [pdfLesson, setPdfLesson] = useState<CatalogRow | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -334,7 +375,7 @@ function CatalogPageInner() {
           if (key === "subject") setParams({ courseId, groupId, classId });
         }}
       />
-      {courseId ? <CourseMediaLinks courseId={courseId} /> : null}
+      {courseId && groupId ? <GroupMediaLinks courseId={courseId} groupId={groupId} /> : null}
       <ResourceTable
         columns={[
           {
@@ -343,6 +384,28 @@ function CatalogPageInner() {
             render: (row) => row.name || row.title || "—",
           },
           { key: "slug", header: "Slug", render: (row) => row.slug || "—" },
+          ...(level === "lesson"
+            ? [
+                {
+                  key: "pdf",
+                  header: "PDF",
+                  render: (row: CatalogRow) =>
+                    row.pdfUrl || row.pdfViewUrl ? (
+                      <a
+                        href={row.pdfUrl || row.pdfViewUrl || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        View PDF
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">None</span>
+                    ),
+                },
+              ]
+            : []),
           {
             key: "status",
             header: "Status",
@@ -368,12 +431,26 @@ function CatalogPageInner() {
         onDelete={setDeleting}
         onRowClick={labels[level].child ? openChild : undefined}
         extraActions={
-          labels[level].child
+          labels[level].child || (level === "lesson" && writable)
             ? (row) => (
-                <Button size="sm" variant="outline" onClick={() => openChild(row)}>
-                  Open {labels[labels[level].child!].plural.toLowerCase()}
-                  <ChevronRight className="size-4" />
-                </Button>
+                <>
+                  {labels[level].child ? (
+                    <Button size="sm" variant="outline" onClick={() => openChild(row)}>
+                      Open {labels[labels[level].child!].plural.toLowerCase()}
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  ) : null}
+                  {level === "lesson" && writable ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPdfLesson(row)}
+                    >
+                      <Upload className="size-4" />
+                      {row.pdfUrl || row.pdfViewUrl ? "Replace PDF" : "Upload PDF"}
+                    </Button>
+                  ) : null}
+                </>
               )
             : undefined
         }
@@ -381,13 +458,18 @@ function CatalogPageInner() {
         emptyDescription={
           labels[level].child
             ? `Create a ${labels[level].singular.toLowerCase()}, then click it to open the next level.`
-            : "Create a lesson to attach study content."
+            : "Create a lesson, then upload its PDF."
         }
       />
       <EntityFormSheet
         open={open}
         title={`${editing ? "Edit" : "Create"} ${labels[level].singular.toLowerCase()}`}
-        fields={fieldsFor(level)}
+        description={
+          level === "lesson"
+            ? "Lesson details are saved as JSON. The PDF is uploaded separately as multipart/form-data (field: file)."
+            : undefined
+        }
+        fields={fieldsFor(level, editing)}
         initialValues={
           editing
             ? {
@@ -402,8 +484,9 @@ function CatalogPageInner() {
                 displayOrder: editing.displayOrder ?? 0,
                 isActive: editing.isActive ?? true,
                 isPublished: editing.isPublished ?? false,
+                file: undefined,
               }
-            : { isActive: true, isPublished: false, displayOrder: 0 }
+            : { isActive: true, isPublished: false, displayOrder: 0, file: undefined }
         }
         pending={pending}
         onOpenChange={setOpen}
@@ -411,8 +494,20 @@ function CatalogPageInner() {
           setPending(true);
           try {
             const body = createBody(values);
-            if (editing) await updateResource(mutatePath(editing), body);
-            else await createResource(mutatePath(), body);
+            const file = body.file as File | undefined;
+            delete body.file;
+
+            if (editing) {
+              await updateResource(mutatePath(editing), body);
+              if (level === "lesson" && file instanceof File) {
+                await attachLessonPdf(editing.id, file);
+              }
+            } else {
+              const created = await createResource<CatalogRow>(mutatePath(), body);
+              if (level === "lesson" && created?.id && file instanceof File) {
+                await attachLessonPdf(created.id, file);
+              }
+            }
             setOpen(false);
             await reload();
           } catch (error) {
@@ -421,6 +516,14 @@ function CatalogPageInner() {
             setPending(false);
           }
         }}
+      />
+      <LessonPdfDialog
+        lesson={pdfLesson}
+        open={Boolean(pdfLesson)}
+        onOpenChange={(next) => {
+          if (!next) setPdfLesson(null);
+        }}
+        onUploaded={reload}
       />
       <ConfirmDialog
         open={Boolean(deleting)}

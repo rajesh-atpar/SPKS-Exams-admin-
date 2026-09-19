@@ -45,6 +45,8 @@ export type FormField = {
   options?: Array<{ label: string; value: string }>;
   hint?: string;
   accept?: string;
+  previewUrl?: string;
+  previewLabel?: string;
 };
 
 function buildSchema(fields: FormField[]) {
@@ -165,12 +167,24 @@ export function EntityFormSheet({
                     )}
                   />
                 ) : field.type === "file" ? (
-                  <Input
-                    id={field.name}
-                    type="file"
-                    accept={field.accept}
-                    onChange={(e) => form.setValue(field.name, e.target.files?.[0])}
-                  />
+                  <div className="grid gap-2">
+                    <Input
+                      id={field.name}
+                      type="file"
+                      accept={field.accept}
+                      onChange={(e) => form.setValue(field.name, e.target.files?.[0])}
+                    />
+                    {field.previewUrl ? (
+                      <a
+                        href={field.previewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                      >
+                        {field.previewLabel || "View current file"}
+                      </a>
+                    ) : null}
+                  </div>
                 ) : (
                   <Input
                     id={field.name}
