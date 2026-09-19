@@ -4,15 +4,27 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 
 import { toastApiError } from "@/lib/api-client";
-import { formatInr, planIntervalLabel, type BillingPlan } from "@/lib/billing";
+import {
+  formatDate,
+  formatInr,
+  planAmount,
+  planIntervalLabel,
+  toDateInputValue,
+  type BillingPlan,
+} from "@/lib/billing";
 import { useAuth } from "@/lib/auth-context";
 import { canWrite } from "@/lib/permissions";
-import { createResource, deleteResource, updateResource, useResourceList } from "@/lib/use-resource";
+import {
+  createResource,
+  deleteResource,
+  loadForEdit,
+  updateResource,
+  useResourceList,
+} from "@/lib/use-resource";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import {
   emptyToUndefined,
   EntityFormSheet,
-  splitTags,
   type FormField,
 } from "@/components/admin/EntityFormSheet";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -27,6 +39,47 @@ type Plan = BillingPlan & {
   courseAccess?: string[];
 };
 
+function buildPlanBody(values: Record<string, unknown>, { clearEmptyDates }: { clearEmptyDates: boolean }) {
+  const body = emptyToUndefined(values);
+
+  const amount = body.amount ?? body.price;
+  if (amount !== undefined && amount !== null && amount !== "") {
+    body.amount = Number(amount);
+  }
+  delete body.price;
+
+  for (const key of ["startDate", "endDate"] as const) {
+    const value = body[key];
+    if (value === undefined || value === "") {
+      body[key] = clearEmptyDates ? null : undefined;
+    }
+  }
+
+  if (body.startDate && body.endDate) {
+    delete body.duration;
+  }
+
+  delete body.features;
+  delete body.courseAccess;
+  delete body.currency;
+
+  return body;
+}
+
+function defaultCreateValues() {
+  const start = new Date();
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  return {
+    name: "Monthly",
+    amount: 1,
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+    isActive: true,
+    duration: "",
+  };
+}
+
 export default function PlansPage() {
   const { user } = useAuth();
   const writable = canWrite(user?.role, "plans");
@@ -38,23 +91,36 @@ export default function PlansPage() {
   const [deleting, setDeleting] = useState<Plan | null>(null);
 
   const fields: FormField[] = [
-    { name: "name", label: "Name", required: true },
+    { name: "name", label: "Name", required: true, placeholder: "Monthly" },
     {
-      name: "price",
-      label: "Price (INR)",
+      name: "amount",
+      label: "Amount (INR)",
       type: "number",
       required: true,
-      hint: "Student app reads prices from GET /api/plans after you save.",
+      hint: "Sent as amount on POST/PATCH /api/admin/plans (price alias also accepted by API).",
     },
-    { name: "currency", label: "Currency", placeholder: "INR" },
+    {
+      name: "startDate",
+      label: "Start date",
+      type: "date",
+      hint: editing
+        ? "Clear and save to send null and remove the fixed start date."
+        : "Included in create body as startDate.",
+    },
+    {
+      name: "endDate",
+      label: "End date",
+      type: "date",
+      hint: editing
+        ? "Clear and save to send null and remove the fixed end date."
+        : "With startDate, the API calculates duration automatically.",
+    },
     {
       name: "duration",
       label: "Duration (days)",
       type: "number",
-      hint: "30 = Monthly, 180 = 6 Months, 365 = Yearly",
+      hint: "Optional fallback when dates are not set. Omitted when both dates are sent.",
     },
-    { name: "features", label: "Features", type: "tags", hint: "One per line or comma-separated" },
-    { name: "courseAccess", label: "Course access", type: "tags", hint: "Course IDs, one per line" },
     { name: "isActive", label: "Active", type: "switch" },
   ];
 
@@ -62,7 +128,7 @@ export default function PlansPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Plans"
-        description="Price cards for the student app. Change price with PATCH — admin never opens Razorpay Checkout."
+        description="Admin list/create/edit/delete use /api/admin/plans only. Table reads amount (or price), startDate, and endDate from the response."
         action={
           writable ? (
             <Button
@@ -81,14 +147,24 @@ export default function PlansPage() {
         columns={[
           { key: "name", header: "Name" },
           {
+            key: "amount",
+            header: "Amount",
+            render: (row) => formatInr(planAmount(row)),
+          },
+          {
+            key: "startDate",
+            header: "Start date",
+            render: (row) => formatDate(row.startDate || row.startsAt),
+          },
+          {
+            key: "endDate",
+            header: "End date",
+            render: (row) => formatDate(row.endDate || row.endsAt),
+          },
+          {
             key: "interval",
             header: "Interval",
             render: (row) => planIntervalLabel(row),
-          },
-          {
-            key: "price",
-            header: "Price",
-            render: (row) => formatInr(row.price),
           },
           { key: "duration", header: "Days" },
           { key: "isActive", header: "Active", render: (row) => <StatusBadge value={row.isActive} /> },
@@ -102,8 +178,10 @@ export default function PlansPage() {
         total={meta.total}
         onPageChange={list.setPage}
         canWrite={writable}
-        onEdit={(row) => {
-          setEditing(row);
+        onEdit={async (row) => {
+          const data = await loadForEdit<Plan>(`/api/admin/plans/${row.id}`, row);
+          if (!data) return;
+          setEditing(data);
           setOpen(true);
         }}
         onDelete={setDeleting}
@@ -113,27 +191,28 @@ export default function PlansPage() {
         title={editing ? "Edit plan" : "Create plan"}
         description={
           editing
-            ? `Update price for ${planIntervalLabel(editing)}. Students see the new price on the next GET /api/plans.`
-            : undefined
+            ? "PATCH /api/admin/plans/:planId — body uses amount, startDate, endDate, isActive."
+            : 'POST /api/admin/plans — e.g. { name: "Monthly", amount: 1, startDate, endDate, isActive: true }'
         }
         fields={fields}
         initialValues={
           editing
             ? {
-                ...editing,
-                features: (editing.features || []).join("\n"),
-                courseAccess: (editing.courseAccess || []).join("\n"),
+                name: editing.name,
+                amount: planAmount(editing),
+                startDate: toDateInputValue(editing.startDate || editing.startsAt),
+                endDate: toDateInputValue(editing.endDate || editing.endsAt),
+                duration: editing.duration ?? "",
+                isActive: editing.isActive ?? true,
               }
-            : { currency: "INR", isActive: true, price: 1, duration: 30 }
+            : defaultCreateValues()
         }
         pending={pending}
         onOpenChange={setOpen}
         onSubmit={async (values) => {
           setPending(true);
           try {
-            const body = emptyToUndefined(values);
-            body.features = splitTags(body.features);
-            body.courseAccess = splitTags(body.courseAccess);
+            const body = buildPlanBody(values, { clearEmptyDates: Boolean(editing) });
             if (editing) await updateResource(`/api/admin/plans/${editing.id}`, body);
             else await createResource("/api/admin/plans", body);
             setOpen(false);
@@ -147,6 +226,9 @@ export default function PlansPage() {
       />
       <ConfirmDialog
         open={Boolean(deleting)}
+        title="Delete plan?"
+        description="If students already bought this plan, delete is blocked by the API. Edit the plan and set Active off instead."
+        confirmLabel="Delete"
         pending={pending}
         onOpenChange={(next) => !next && setDeleting(null)}
         onConfirm={async () => {

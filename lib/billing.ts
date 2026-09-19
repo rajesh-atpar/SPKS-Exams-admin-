@@ -4,9 +4,14 @@ export type BillingPlan = {
   id?: string;
   name?: string;
   price?: number;
+  amount?: number;
   currency?: string;
   duration?: number;
   interval?: "1_month" | "6_months" | "1_year" | "none" | string;
+  startDate?: string | null;
+  endDate?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
   isActive?: boolean;
 };
 
@@ -99,9 +104,23 @@ export function planIntervalLabel(plan?: BillingPlan | null) {
   return plan.name || "—";
 }
 
+export function planAmount(plan?: BillingPlan | null) {
+  if (!plan) return 0;
+  const value = plan.amount ?? plan.price;
+  return Number(value || 0);
+}
+
+export function toDateInputValue(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
 export function planSummary(sub?: BillingSubscription | null) {
   if (!sub) return "No active plan";
-  const plan = planIntervalLabel(sub.plan) !== "—" ? planIntervalLabel(sub.plan) : sub.plan?.name || "Plan";
+  const plan =
+    planIntervalLabel(sub.plan) !== "—" ? planIntervalLabel(sub.plan) : sub.plan?.name || "Plan";
   const days =
     sub.status === "active" && typeof sub.daysRemaining === "number"
       ? ` · ${sub.daysRemaining} day${sub.daysRemaining === 1 ? "" : "s"} left`
