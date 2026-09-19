@@ -4,9 +4,10 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 
 import { toastApiError } from "@/lib/api-client";
+import { formatInr, planIntervalLabel, type BillingPlan } from "@/lib/billing";
 import { useAuth } from "@/lib/auth-context";
 import { canWrite } from "@/lib/permissions";
-import { createResource, deleteResource, loadForEdit, updateResource, useResourceList } from "@/lib/use-resource";
+import { createResource, deleteResource, updateResource, useResourceList } from "@/lib/use-resource";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import {
   emptyToUndefined,
@@ -19,15 +20,11 @@ import { ResourceTable, useListQuery } from "@/components/admin/ResourceTable";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/button";
 
-type Plan = {
+type Plan = BillingPlan & {
   id: string;
   name: string;
-  price?: number;
-  currency?: string;
-  duration?: number;
   features?: string[];
   courseAccess?: string[];
-  isActive?: boolean;
 };
 
 export default function PlansPage() {
@@ -42,9 +39,20 @@ export default function PlansPage() {
 
   const fields: FormField[] = [
     { name: "name", label: "Name", required: true },
-    { name: "price", label: "Price", type: "number", required: true },
+    {
+      name: "price",
+      label: "Price (INR)",
+      type: "number",
+      required: true,
+      hint: "Student app reads prices from GET /api/plans after you save.",
+    },
     { name: "currency", label: "Currency", placeholder: "INR" },
-    { name: "duration", label: "Duration (days)", type: "number" },
+    {
+      name: "duration",
+      label: "Duration (days)",
+      type: "number",
+      hint: "30 = Monthly, 180 = 6 Months, 365 = Yearly",
+    },
     { name: "features", label: "Features", type: "tags", hint: "One per line or comma-separated" },
     { name: "courseAccess", label: "Course access", type: "tags", hint: "Course IDs, one per line" },
     { name: "isActive", label: "Active", type: "switch" },
@@ -54,7 +62,7 @@ export default function PlansPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Plans"
-        description="Subscription plans. Create, update, and delete are admin-only."
+        description="Price cards for the student app. Change price with PATCH — admin never opens Razorpay Checkout."
         action={
           writable ? (
             <Button
@@ -73,9 +81,14 @@ export default function PlansPage() {
         columns={[
           { key: "name", header: "Name" },
           {
+            key: "interval",
+            header: "Interval",
+            render: (row) => planIntervalLabel(row),
+          },
+          {
             key: "price",
             header: "Price",
-            render: (row) => `${row.currency || "INR"} ${row.price ?? 0}`,
+            render: (row) => formatInr(row.price),
           },
           { key: "duration", header: "Days" },
           { key: "isActive", header: "Active", render: (row) => <StatusBadge value={row.isActive} /> },
@@ -89,10 +102,8 @@ export default function PlansPage() {
         total={meta.total}
         onPageChange={list.setPage}
         canWrite={writable}
-        onEdit={async (row) => {
-          const data = await loadForEdit<Plan>(`/api/admin/plans/${row.id}`, row);
-          if (!data) return;
-          setEditing(data);
+        onEdit={(row) => {
+          setEditing(row);
           setOpen(true);
         }}
         onDelete={setDeleting}
@@ -100,6 +111,11 @@ export default function PlansPage() {
       <EntityFormSheet
         open={open}
         title={editing ? "Edit plan" : "Create plan"}
+        description={
+          editing
+            ? `Update price for ${planIntervalLabel(editing)}. Students see the new price on the next GET /api/plans.`
+            : undefined
+        }
         fields={fields}
         initialValues={
           editing
@@ -108,7 +124,7 @@ export default function PlansPage() {
                 features: (editing.features || []).join("\n"),
                 courseAccess: (editing.courseAccess || []).join("\n"),
               }
-            : { currency: "INR", isActive: true }
+            : { currency: "INR", isActive: true, price: 1, duration: 30 }
         }
         pending={pending}
         onOpenChange={setOpen}

@@ -1,7 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
+import {
+  formatDate,
+  planIntervalLabel,
+  userDisplayName,
+  type BillingSubscription,
+} from "@/lib/billing";
 import { useResourceList } from "@/lib/use-resource";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { ResourceTable, useListQuery } from "@/components/admin/ResourceTable";
@@ -14,24 +22,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-type Subscription = {
-  id: string;
-  userId?: string;
-  planId?: string;
-  status?: string;
-  startsAt?: string;
-  endsAt?: string;
-  cancelledAt?: string;
-};
-
 export default function SubscriptionsPage() {
+  return (
+    <Suspense>
+      <SubscriptionsPageInner />
+    </Suspense>
+  );
+}
+
+function SubscriptionsPageInner() {
+  const params = useSearchParams();
+  const userFromUrl = params?.get("userId") || "";
   const list = useListQuery();
   const [status, setStatus] = useState("all");
   const query = useMemo(
-    () => ({ ...list.query, status: status === "all" ? undefined : status }),
-    [list.query, status]
+    () => ({
+      ...list.query,
+      status: status === "all" ? undefined : status,
+      userId: userFromUrl || undefined,
+    }),
+    [list.query, status, userFromUrl]
   );
-  const { items, meta, loading } = useResourceList<Subscription>(
+  const { items, meta, loading } = useResourceList<BillingSubscription>(
     "/api/admin/subscriptions",
     query
   );
@@ -40,15 +52,60 @@ export default function SubscriptionsPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Subscriptions"
-        description="Student plan subscriptions. Status: active, cancelled, expired, pending."
+        description="Who currently has access, and when it expires. Filter active to see students who can open courses."
       />
       <ResourceTable
         columns={[
-          { key: "userId", header: "User" },
-          { key: "planId", header: "Plan" },
-          { key: "status", header: "Status", render: (row) => <StatusBadge value={row.status} /> },
-          { key: "startsAt", header: "Starts", render: (row) => formatDate(row.startsAt) },
-          { key: "endsAt", header: "Ends", render: (row) => formatDate(row.endsAt) },
+          {
+            key: "student",
+            header: "Student",
+            render: (row) => (
+              <div className="space-y-0.5">
+                {row.userId ? (
+                  <Link
+                    href={`/users/${row.userId}`}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {userDisplayName(row.user)}
+                  </Link>
+                ) : (
+                  <span>{userDisplayName(row.user)}</span>
+                )}
+                <p className="text-xs text-muted-foreground">{row.user?.email || "—"}</p>
+              </div>
+            ),
+          },
+          {
+            key: "plan",
+            header: "Plan",
+            render: (row) => (
+              <div className="space-y-0.5">
+                <p>{row.plan?.name || planIntervalLabel(row.plan)}</p>
+                <p className="text-xs text-muted-foreground">{planIntervalLabel(row.plan)}</p>
+              </div>
+            ),
+          },
+          {
+            key: "status",
+            header: "Status",
+            render: (row) => <StatusBadge value={row.status} />,
+          },
+          {
+            key: "startsAt",
+            header: "Starts",
+            render: (row) => formatDate(row.startsAt),
+          },
+          {
+            key: "endsAt",
+            header: "Ends",
+            render: (row) => formatDate(row.endsAt),
+          },
+          {
+            key: "daysRemaining",
+            header: "Days left",
+            render: (row) =>
+              row.status === "active" ? String(row.daysRemaining ?? 0) : "—",
+          },
         ]}
         rows={items}
         loading={loading}
@@ -72,12 +129,9 @@ export default function SubscriptionsPage() {
             </SelectContent>
           </Select>
         }
+        emptyTitle={userFromUrl ? "No subscriptions for this student" : "No subscriptions yet"}
+        emptyDescription="After a paid ₹1 Monthly purchase, an active subscription appears with endsAt = today + 30 days."
       />
     </div>
   );
-}
-
-function formatDate(value?: string) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
 }

@@ -77,23 +77,31 @@ export default function DashboardPage() {
   }, []);
 
   const cards = [
-    { label: "Users", value: overview?.users, icon: Users, href: "/users" },
+    { label: "Total students", value: overview?.users, icon: Users, href: "/users" },
     { label: "Staff", value: overview?.staff, icon: UserCog, href: "/users" },
     { label: "Courses", value: overview?.courses, icon: GraduationCap, href: "/catalog" },
     { label: "Tests", value: overview?.tests, icon: BookOpen, href: "/tests" },
-    { label: "Paid payments", value: overview?.paidPayments, icon: CreditCard, href: "/payments" },
-    { label: "Revenue", value: formatInr(overview?.revenue), icon: IndianRupee, href: "/payments" },
+    { label: "Paid payments", value: overview?.paidPayments ?? revenue?.paidCount, icon: CreditCard, href: "/payments?status=paid" },
+    { label: "Revenue", value: formatInr(overview?.revenue ?? revenue?.totalRevenue), icon: IndianRupee, href: "/payments" },
   ];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <PageHeader
         title="Dashboard"
-        description="Live staff analytics for users, catalog, tests, and revenue."
+        description="Admin does not pay. View students, paid payments, and revenue. Change plan prices on Plans."
         action={
-          <Button asChild>
-            <Link href="/catalog">Manage catalog</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/plans">Plans</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/subscriptions">Subscriptions</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/payments">Payments</Link>
+            </Button>
+          </div>
         }
       />
 
@@ -154,7 +162,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Revenue</CardTitle>
-            <CardDescription>Razorpay payment outcomes</CardDescription>
+            <CardDescription>GET /api/admin/analytics/revenue — Razorpay outcomes</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-3 gap-4 text-sm">
             <Stat label="Total" value={formatInr(revenue?.totalRevenue)} loading={loading} />

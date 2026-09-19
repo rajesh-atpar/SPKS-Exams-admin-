@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ClipboardList } from "lucide-react";
+import { Plus, ClipboardList, CreditCard } from "lucide-react";
 
 import { apiPatch, toastApiError } from "@/lib/api-client";
+import { planSummary, type StudentUser } from "@/lib/billing";
 import { useAuth } from "@/lib/auth-context";
 import { canWrite } from "@/lib/permissions";
-import type { StaffUser, UserStatus } from "@/lib/types";
+import type { UserStatus } from "@/lib/types";
 import { createResource, deleteResource, loadForEdit, updateResource, useResourceList } from "@/lib/use-resource";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { emptyToUndefined, EntityFormSheet, type FormField } from "@/components/admin/EntityFormSheet";
@@ -42,11 +43,11 @@ export default function UsersPage() {
     }),
     [list.query, role, status]
   );
-  const { items, meta, loading, reload } = useResourceList<StaffUser>("/api/admin/users", query);
+  const { items, meta, loading, reload } = useResourceList<StudentUser>("/api/admin/users", query);
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<StaffUser | null>(null);
+  const [editing, setEditing] = useState<StudentUser | null>(null);
   const [pending, setPending] = useState(false);
-  const [deleting, setDeleting] = useState<StaffUser | null>(null);
+  const [deleting, setDeleting] = useState<StudentUser | null>(null);
 
   const fields: FormField[] = [
     { name: "firstName", label: "First name", required: true },
@@ -73,7 +74,7 @@ export default function UsersPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Users"
-        description="Block/unblock with status. Delete permanently removes the user (admin only)."
+        description="Students show hasActiveSubscription from billing. Open a student for plan, days left, and payment history. Admin never pays."
         action={
           writable ? (
             <Button
@@ -96,10 +97,24 @@ export default function UsersPage() {
             render: (row) => `${row.firstName || ""} ${row.lastName || ""}`.trim() || "—",
           },
           { key: "email", header: "Email" },
+          { key: "phone", header: "Phone", render: (row) => row.phone || "—" },
           {
             key: "role",
             header: "Role",
             render: (row) => <span className="capitalize">{row.role}</span>,
+          },
+          {
+            key: "subscription",
+            header: "Plan",
+            render: (row) =>
+              row.role === "user" ? (
+                <div className="max-w-56 space-y-1">
+                  <StatusBadge value={Boolean(row.hasActiveSubscription)} />
+                  <p className="text-xs text-muted-foreground">{planSummary(row.subscription)}</p>
+                </div>
+              ) : (
+                "—"
+              ),
           },
           {
             key: "status",
@@ -145,21 +160,36 @@ export default function UsersPage() {
         onPageChange={list.setPage}
         canWrite={writable}
         onEdit={async (row) => {
-          const data = await loadForEdit<StaffUser>(`/api/admin/users/${row.id}`, row);
+          const data = await loadForEdit<StudentUser>(`/api/admin/users/${row.id}`, row);
           if (!data) return;
           setEditing(data);
           setOpen(true);
         }}
         onDelete={canStatus ? setDeleting : undefined}
+        onRowClick={(row) => {
+          if (row.role === "user") router.push(`/users/${row.id}`);
+        }}
         extraActions={(row) => (
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Test history"
-            onClick={() => router.push(`/users/${row.id}/results`)}
-          >
-            <ClipboardList className="size-4" />
-          </Button>
+          <>
+            {row.role === "user" ? (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Billing"
+                onClick={() => router.push(`/users/${row.id}`)}
+              >
+                <CreditCard className="size-4" />
+              </Button>
+            ) : null}
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Test history"
+              onClick={() => router.push(`/users/${row.id}/results`)}
+            >
+              <ClipboardList className="size-4" />
+            </Button>
+          </>
         )}
         filters={
           <>
